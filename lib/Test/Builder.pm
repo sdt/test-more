@@ -437,6 +437,7 @@ sub reset {    ## no critic (Subroutines::ProhibitBuiltinHomonyms)
     $self->{No_Plan}      = 0;
     $self->{Have_Output_Plan} = 0;
     $self->{Done_Testing} = 0;
+    $self->{Done_Testing_Callbacks} = [];
 
     $self->{Original_Pid} = $$;
     $self->{Child_Name}   = undef;
@@ -680,14 +681,6 @@ Or to plan a variable number of tests:
 sub done_testing {
     my($self, $num_tests) = @_;
 
-    # If done_testing() specified the number of tests, shut off no_plan.
-    if( defined $num_tests ) {
-        $self->{No_Plan} = 0;
-    }
-    else {
-        $num_tests = $self->current_test;
-    }
-
     if( $self->{Done_Testing} ) {
         my($file, $line) = @{$self->{Done_Testing}}[1,2];
         $self->ok(0, "done_testing() was already called at $file line $line");
@@ -695,6 +688,19 @@ sub done_testing {
     }
 
     $self->{Done_Testing} = [caller];
+
+    # Run the done_testing() callbacks in the order they were called.
+    for my $callback (@{ $self->{Done_Testing_Callbacks} }) {
+        $callback->();
+    }
+
+    # If done_testing() specified the number of tests, shut off no_plan.
+    if( defined $num_tests ) {
+        $self->{No_Plan} = 0;
+    }
+    else {
+        $num_tests = $self->current_test;
+    }
 
     if( $self->expected_tests && $num_tests != $self->expected_tests ) {
         $self->ok(0, "planned to run @{[ $self->expected_tests ]} ".
@@ -715,6 +721,24 @@ sub done_testing {
     $self->is_passing(0) if $self->{Curr_Test} == 0;
 
     return 1;
+}
+
+=item B<add_done_testing_callback>
+
+  $Test->add_done_testing_callback($my_callback);
+
+Registers a callback to be run from withing done_testing, before done_testing
+itself runs.
+
+Multiple callbacks may be added; they will be called the in the order they
+were added.
+
+=cut
+
+sub add_done_testing_callback {
+    my ($self, $callback) = @_;
+
+    push(@{ $self->{Done_Testing_Callbacks} }, $callback);
 }
 
 
